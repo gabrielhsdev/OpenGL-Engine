@@ -1,0 +1,71 @@
+# IDE and Editor files
+.vscode/
+.vs/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+.idea/
+*.swp
+*.swo
+*~
+
+# Build artifacts and executables
+lib/
+build/
+bin/
+out/
+dist/
+cmake-build-*/
+main.exe
+main.exe.dSYM/
+*.exe
+*.app
+*.dSYM/
+
+# Platform-specific files
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# Build system files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.make
+
+# Compiler and linker files
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.pdb
+*.ilk
+*.exp
+
+# Package managers
+vcpkg_installed/
+conan/
+.conan/
+
+# Dependencies (if not using package managers)
+# Uncomment these if you're not tracking dependencies
+# glfw/
+# glad/
+# dependencies/
+# third_party/
