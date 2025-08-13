@@ -1,0 +1,73 @@
+# Makefile for OpenGL Project
+# Compiler and flags
+CXX = /usr/bin/clang++
+CXXFLAGS = -std=c++17 -fdiagnostics-color=always -Wall -g
+
+# Directories
+SRC_DIR = src
+INCLUDE_DIR = include
+BUILD_DIR = build
+TARGET = main.exe
+
+# Include paths
+INCLUDES = -I$(INCLUDE_DIR) -I/opt/homebrew/opt/glfw/include
+
+# Library paths and libraries
+LDFLAGS = -L/opt/homebrew/opt/glfw/lib
+LIBS = -lglfw -framework OpenGL
+
+# Source files
+SOURCES = $(wildcard $(SRC_DIR)/*.cpp)
+OBJECTS = $(SOURCES:$(SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
+
+# Default target
+all: $(TARGET)
+
+# Build the main executable
+$(TARGET): $(OBJECTS)
+	$(CXX) $(OBJECTS) $(LDFLAGS) $(LIBS) -o $(TARGET)
+	@echo "Build complete: $(TARGET)"
+
+# Compile source files to object files
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+# Create build directory
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+
+# Clean build artifacts
+clean:
+	rm -rf $(BUILD_DIR) $(TARGET) $(TARGET).dSYM
+	@echo "Clean complete"
+
+# Run the executable
+run: $(TARGET)
+	./$(TARGET)
+
+# Debug build with additional debug flags
+debug: CXXFLAGS += -DDEBUG -O0
+debug: $(TARGET)
+
+# Release build with optimizations
+release: CXXFLAGS += -O3 -DNDEBUG
+release: clean $(TARGET)
+
+# Install dependencies (if using Homebrew)
+install-deps:
+	@echo "Installing dependencies via Homebrew..."
+	brew install glfw
+
+# Show help
+help:
+	@echo "Available targets:"
+	@echo "  all (default) - Build the project"
+	@echo "  clean         - Remove build artifacts"
+	@echo "  run           - Build and run the executable"
+	@echo "  debug         - Build with debug flags"
+	@echo "  release       - Build optimized release version"
+	@echo "  install-deps  - Install dependencies via Homebrew"
+	@echo "  help          - Show this help message"
+
+# Declare phony targets
+.PHONY: all clean run debug release install-deps help
