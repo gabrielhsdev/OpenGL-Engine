@@ -3,9 +3,6 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
-// TODO: Create a function to initialize only the VAO
-// TODO: Create a function to initialize only the VBO to be used for rendering a triangle without EBO
-
 /**
  * @brief Callback function to adjust the viewport when the window size changes.
  * @param window A pointer to the GLFWwindow that received the event.
@@ -113,41 +110,41 @@ unsigned int createShaderProgram(const char* vertexSrc, const char* fragmentSrc)
 }
 
 /**
- * @brief Creates a Vertex Array Object (VAO) and Vertex Buffer Object (VBO) for a single triangle.
- * @param VAO Reference to an unsigned int to store the generated VAO ID.
- * @param VBO Reference to an unsigned int to store the generated VBO ID.
+ * @brief Sets up our VAO
+ * @param VAO The ID of the Vertex Array Object to set up.
  */
-void createTriangleVAO(unsigned int &VAO, unsigned int &VBO) {
-    float vertices[] = {
-        -0.5f, -0.5f, 0.0f, // left 
-         0.5f, -0.5f, 0.0f, // right
-         0.0f,  0.5f, 0.0f  // top   
-    };
-
-    glGenVertexArrays(1, &VAO);
+void setupVAO(unsigned int &VAO) {
+    glGenVertexArrays(1, &VAO); // Generate a VAO
     glBindVertexArray(VAO);
-    
-    glGenBuffers(1, &VBO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-
-    glBindVertexArray(0);
 }
 
 /**
- * @brief Creates a Vertex Array Object (VAO), Vertex Buffer Object (VBO), and Element Buffer Object (EBO) for a rectangle (two triangles).
- * @param VAO Reference to an unsigned int to store the generated VAO ID.
- * @param VBO Reference to an unsigned int to store the generated VBO ID.
- * @param EBO Reference to an unsigned int to store the generated EBO ID.
+ * @brief Sets up our VBO, can be used for rendering a triangle without EBO or with EBO
+ * @param VBO The ID of the Vertex Buffer Object to set up.
+ * @param vertices Pointer to the vertex data array.
+ * @param size The size of the vertex data array in bytes.
  */
-void createTriangleEBO(unsigned int &VAO, unsigned int &VBO, unsigned int &EBO) {
-    // Element Buffer Objects (EBOs) allow us to reuse vertices for multiple triangles.
-    // Thankfully, element buffer objects work exactly like that. 
-    // An EBO is a buffer, just like a vertex buffer object, that stores indices that 
-    //OpenGL uses to decide what vertices to draw
+void setupVBO (unsigned int &VBO, float *vertices, size_t size) {
+    // Generate a VBO
+    glGenBuffers(1, &VBO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, size, vertices, GL_STATIC_DRAW);
+
+    // Define vertex attributes
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    
+    // Do not unbind the VAO here when using EBO! 
+    // The VAO unbinding should be done after EBO setup
+}
+
+/**
+ * @brief Sets up a rectangle using an Element Buffer Object (EBO).
+ * @param VAO The ID of the Vertex Array Object to set up.
+ * @param VBO The ID of the Vertex Buffer Object to set up.
+ * @param EBO The ID of the Element Buffer Object to set up.
+ */
+void setupRectangleWithEBO(unsigned int &VBO, unsigned int &EBO) {
     float vertices[] = {
         0.5f,  0.5f, 0.0f,  // top right
         0.5f, -0.5f, 0.0f,  // bottom right
@@ -159,25 +156,33 @@ void createTriangleEBO(unsigned int &VAO, unsigned int &VBO, unsigned int &EBO) 
         1, 2, 3    // second triangle
     }; 
 
-    // Create VAO
-    glGenVertexArrays(1, &VAO);
-    glBindVertexArray(VAO);
+    // Setup VBO ( we need vertices for that )
+    setupVBO(VBO, vertices, sizeof(vertices));
 
-    // Create VBO
-    glGenBuffers(1, &VBO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-    // Create EBO
+    // Create EBO (must be done while VAO is still bound)
     glGenBuffers(1, &EBO);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+    
+    // Now unbind the VAO after both VBO and EBO are set up
+    glBindVertexArray(0);
+}
 
-    // Define vertex attributes
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
+/**
+ * @brief Sets up a triangle without using an Element Buffer Object (EBO).
+ * @param VAO The ID of the Vertex Array Object to set up.
+ * @param VBO The ID of the Vertex Buffer Object to set up.
+ */
+void setupTriangleWithoutEBO(unsigned int &VBO) {
+    float vertices[] = {
+        -0.5f, -0.5f, 0.0f, // left 
+         0.5f, -0.5f, 0.0f, // right
+         0.0f,  0.5f, 0.0f  // top   
+    };
 
-    // Do not unbind the EBO here! It stays bound to the VAO
+    setupVBO(VBO, vertices, sizeof(vertices));
+    
+    // Unbind VAO since we're not using EBO
     glBindVertexArray(0);
 }
 
@@ -200,7 +205,7 @@ void renderTriangle(unsigned int shaderProgram, unsigned int VAO) {
  * @param shaderProgram The ID of the shader program to use for rendering.
  * @param VAO The ID of the Vertex Array Object containing the shape's data and EBO.
  */
-void renderTriangleEBO(unsigned int shaderProgram, unsigned int VAO) {
+void renderRectangleEBO(unsigned int shaderProgram, unsigned int VAO) {
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
@@ -257,14 +262,18 @@ int main() {
     unsigned int shaderProgram = createShaderProgram(vertexShaderSource, fragmentShaderSource);
 
     unsigned int VAO, VBO, EBO;
-    // createTriangleVAO(VAO, VBO); // This should be used if not using EBO
-    createTriangleEBO(VAO, VBO, EBO); // Use this if using EBO
+    setupVAO(VAO);
+    // Uncomment one of the following lines depending on whether you want to render a rectangle with EBO or a triangle without EBO
+    setupRectangleWithEBO(VBO, EBO);
+    // setupTriangleWithoutEBO(VBO);
 
     // Main loop
     while (!glfwWindowShouldClose(window)) {
         processInput(window);
-        // renderTriangle(shaderProgram, VAO); // This should be used if not using EBO
-        renderTriangleEBO(shaderProgram, VAO); // Use this if using EBO
+        // .. Rendering commands here ..
+        renderRectangleEBO(shaderProgram, VAO);
+        // renderTriangle(shaderProgram, VAO);
+        // .. End rendering commands here ..
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
