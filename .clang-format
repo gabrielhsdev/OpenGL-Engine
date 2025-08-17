@@ -1,0 +1,60 @@
+# .clang-format configuration for C++ projects
+# This file defines formatting rules for consistent code style
+
+# Base style to start with
+BasedOnStyle: LLVM
+
+# Indentation settings
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ContinuationIndentWidth: 4
+
+# Braces and spacing
+BreakBeforeBraces: Attach
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyParentheses: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+
+# Line length and breaking
+ColumnLimit: 100
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+
+# Alignment
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignOperands: true
+AlignTrailingComments: true
+AlignArrayOfStructures: Left
+
+# Array and initializer formatting
+Cpp11BracedListStyle: true
+SpacesInContainerLiterals: false
+
+# Includes and namespace
+SortIncludes: false # Disable automatic sorting of includes, sometimes it messes up our imports and causes issues
+NamespaceIndentation: None
+
+# Pointers and references
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+# Function parameters
+AllowAllParametersOfDeclarationOnNextLine: false
+BinPackParameters: false
+BinPackArguments: false
+
+# Control statements
+SpaceBeforeCtrlStatements: true
+AllowShortCaseLabelsOnASingleLine: false
+
+# Comments
+ReflowComments: true
+CommentPragmas: '^ IWYU pragma:'
+
+# Other formatting options
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
