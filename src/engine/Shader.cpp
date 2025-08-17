@@ -1,4 +1,4 @@
-#include "shaders/Shader.h"
+#include "engine/Shader.h"
 
 std::stringstream Shader::readShaderFile(const char* shaderPath) {
     std::ifstream shaderFile;
@@ -51,7 +51,6 @@ unsigned int Shader::createShaderProgram(const ShaderType& vertex, const ShaderT
     glDeleteShader(vertex.id);
     glDeleteShader(fragment.id);
 
-    std::cout << "Shader program created successfully with programId: " << programId << '\n';
     return programId;
 }
 

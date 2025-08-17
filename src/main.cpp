@@ -1,10 +1,9 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
-#include <shaders/Shader.h>
+#include <engine/Shader.h>
 
 // TODO: Fix vscode play button to build and run the project
-// TODO: Find a good way to document the code, look at the Shader class for an example ( .cpp & .h )
 
 // clang-format off
 float RECTANGLE_VERTICES[] = {

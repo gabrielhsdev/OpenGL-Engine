@@ -1,4 +1,3 @@
-# Makefile for OpenGL Project
 # Compiler and flags
 CXX = /usr/bin/clang++
 CXXFLAGS = -std=c++17 -fdiagnostics-color=always -Wall -g
@@ -16,9 +15,9 @@ INCLUDES = -I$(INCLUDE_DIR) -I/opt/homebrew/opt/glfw/include
 LDFLAGS = -L/opt/homebrew/opt/glfw/lib
 LIBS = -lglfw -framework OpenGL
 
-# Source files
-SOURCES = $(wildcard $(SRC_DIR)/*.cpp)
-OBJECTS = $(SOURCES:$(SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
+# Source files (recursive search)
+SOURCES = $(shell find $(SRC_DIR) -name "*.cpp")
+OBJECTS = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SOURCES))
 
 # Default target
 all: $(TARGET)
@@ -29,12 +28,9 @@ $(TARGET): $(OBJECTS)
 	@echo "Build complete: $(TARGET)"
 
 # Compile source files to object files
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
+	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
-
-# Create build directory
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
 
 # Clean build artifacts
 clean:
@@ -69,5 +65,4 @@ help:
 	@echo "  install-deps  - Install dependencies via Homebrew"
 	@echo "  help          - Show this help message"
 
-# Declare phony targets
 .PHONY: all clean run debug release install-deps help
