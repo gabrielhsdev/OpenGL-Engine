@@ -6,6 +6,9 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 /**
  * @class Shader
@@ -62,6 +65,19 @@ class Shader {
      * @param value Float value to set.
      */
     void setFloat(const std::string& name, float value) const;
+
+    /**
+     * @brief Set a 4x4 matrix uniform.
+     * @param name Uniform name in the shader.
+     * @param mat 4x4 matrix to set.
+     */
+    void setMat4(const std::string& name, const glm::mat4& mat) const;
+
+    /**
+     * @brief Get the OpenGL shader program ID.
+     * @param shaderProgramID Reference to store the shader program ID.
+     */
+    unsigned int getShaderProgramID();
 
   private:
     unsigned int SHADERPROGRAMID; ///< OpenGL shader program ID
