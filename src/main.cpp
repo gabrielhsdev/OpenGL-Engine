@@ -7,8 +7,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-// TODO: Fix vscode play button to build and run the project
-
 // clang-format off
 float RECTANGLE_VERTICES[] = {
     // positions          // colors           // texture coords
@@ -83,6 +81,24 @@ glm::vec3 CUBE_POSITIONS[] = {
 };
 // clang-format on
 
+// GLOBAL
+// camera
+glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
+glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+
+bool firstMouse = true;
+float yaw = -90.0f; // yaw is initialized to -90.0 degrees since a yaw of 0.0 results in a direction
+                    // vector pointing to the right so we initially rotate a bit to the left.
+float pitch = 0.0f;
+float lastX = 800.0f / 2.0;
+float lastY = 600.0 / 2.0;
+float fov = 45.0f;
+
+// timing
+float deltaTime = 0.0f; // time between current frame and last frame
+float lastFrame = 0.0f;
+
 /**
  * @brief Callback function to adjust the viewport when the window size changes.
  * @param window A pointer to the GLFWwindow that received the event.
@@ -98,10 +114,23 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
  * @brief Processes user input, specifically checking for the ESCAPE key to close the window.
  * @param window A pointer to the GLFWwindow to check for input.
  */
-void processInput(GLFWwindow* window) {
+void processInput(GLFWwindow* window,
+                  glm::vec3& cameraPos,
+                  glm::vec3& cameraFront,
+                  glm::vec3& cameraUp,
+                  float deltaTime) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, 1);
     }
+    const float cameraSpeed = 2.5f * deltaTime; // adjust accordingly
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+        cameraPos += cameraSpeed * cameraFront;
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+        cameraPos -= cameraSpeed * cameraFront;
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+        cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+        cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
 }
 
 /**
@@ -263,12 +292,62 @@ unsigned int loadTexture(const char* path) {
     return textureID;
 }
 
+/**
+ * @brief Generates a transformation matrix combining translation, rotation, and scaling.
+ * @param angle The rotation angle in radians.
+ * @param translation A glm::vec3 representing the translation vector.
+ * @param scale A glm::vec3 representing the scaling factors along each axis.
+ * @return A glm::mat4 representing the combined transformation matrix.
+ */
 glm::mat4 getTransformMatrix(float angle, glm::vec3 translation, glm::vec3 scale) {
     glm::mat4 transform = glm::mat4(1.0f);              // Initialize to identity matrix
     transform = glm::translate(transform, translation); // Apply translation
     transform = glm::rotate(transform, angle, glm::vec3(0.0f, 0.0f, 1.0f)); // Apply rotation
     transform = glm::scale(transform, scale);                               // Apply scaling
     return transform;
+}
+
+void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
+    float xpos = static_cast<float>(xposIn);
+    float ypos = static_cast<float>(yposIn);
+
+    if (firstMouse) {
+        lastX = xpos;
+        lastY = ypos;
+        firstMouse = false;
+    }
+
+    float xoffset = xpos - lastX;
+    float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
+    lastX = xpos;
+    lastY = ypos;
+
+    float sensitivity = 0.1f; // change this value to your liking
+    xoffset *= sensitivity;
+    yoffset *= sensitivity;
+
+    yaw += xoffset;
+    pitch += yoffset;
+
+    // make sure that when pitch is out of bounds, screen doesn't get flipped
+    if (pitch > 89.0f)
+        pitch = 89.0f;
+    if (pitch < -89.0f)
+        pitch = -89.0f;
+
+    glm::vec3 front;
+    front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+    front.y = sin(glm::radians(pitch));
+    front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+    cameraFront = glm::normalize(front);
+}
+
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
+    fov -= (float)yoffset;
+    if (fov < 1.0f)
+        fov = 1.0f;
+    if (fov > 45.0f)
+        fov = 45.0f;
 }
 
 /**
@@ -294,6 +373,7 @@ int main() {
     glViewport(0, 0, fbWidth, fbHeight);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glEnable(GL_DEPTH_TEST);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // Hide cursor
 
     Shader ourShader("shaders/shader.vert.glsl", "shaders/shader.frag.glsl");
 
@@ -338,12 +418,30 @@ int main() {
     view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
 
     glm::mat4 projection;
-    projection = glm::perspective(glm::radians(45.0f), 800.0f / 600.0f, 0.1f, 100.0f);
+    projection = glm::perspective(glm::radians(fov), 1280.0f / 720.0f, 0.1f, 100.0f);
+
+    // Set transform matrices
+    GLint modelLoc = glGetUniformLocation(ourShader.getShaderProgramID(), "model");
+    GLint viewLoc = glGetUniformLocation(ourShader.getShaderProgramID(), "view");
+    GLint projLoc = glGetUniformLocation(ourShader.getShaderProgramID(), "projection");
+    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+    glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
+    float deltaTime = 0.0f; // Time between current frame and last frame
+    float lastFrame = 0.0f; // Time of last frame
+
+    glfwSetCursorPosCallback(window, mouse_callback);
+    glfwSetScrollCallback(window, scroll_callback);
 
     // Main loop
     while (glfwWindowShouldClose(window) == 0) {
-        // Preparaion for rendering
-        processInput(window);                          // Check for user input
+        // Per frame time logic
+        float currentFrame = glfwGetTime();
+        deltaTime = currentFrame - lastFrame;
+        lastFrame = currentFrame;
+
+        // Input
+        processInput(window, cameraPos, cameraFront, cameraUp, deltaTime);
         renderBackgroundColor(0.2f, 0.3f, 0.3f, 1.0f); // Set background color
 
         // Bind texture
@@ -351,14 +449,6 @@ int main() {
         glBindTexture(GL_TEXTURE_2D, texture1);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, texture2);
-
-        // Set transform matrices
-        GLint modelLoc = glGetUniformLocation(ourShader.getShaderProgramID(), "model");
-        GLint viewLoc = glGetUniformLocation(ourShader.getShaderProgramID(), "view");
-        GLint projLoc = glGetUniformLocation(ourShader.getShaderProgramID(), "projection");
-        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-        glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
-        glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
         // Render triangle
         glBindVertexArray(triangleVAO);
@@ -370,6 +460,13 @@ int main() {
             ourShader.setMat4("model", model);
             glDrawArrays(GL_TRIANGLES, 0, 36);
         }
+
+        // Rotate camera around the origin
+        view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+        glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
+
+        projection = glm::perspective(glm::radians(fov), 1280.0f / 720.0f, 0.1f, 100.0f);
+        glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
         // Render rectangle (uncomment to see both)
         // glBindVertexArray(rectangleVAO);
