@@ -1,11 +1,16 @@
+// Various
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
-#include <engine/Shader.h>
-#include <engine/stb_image.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+// Engine
+#include <engine/Shader.h>
+#include <engine/InputManager.h>
+#include <engine/Camera.h>
+#include <engine/CameraController.h>
+#include <engine/stb_image.h>
 
 // clang-format off
 float RECTANGLE_VERTICES[] = {
@@ -81,65 +86,17 @@ glm::vec3 CUBE_POSITIONS[] = {
 };
 // clang-format on
 
-// GLOBAL
-// camera
-glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
-glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
-glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
-
-bool firstMouse = true;
-float yaw = -90.0f; // yaw is initialized to -90.0 degrees since a yaw of 0.0 results in a direction
-                    // vector pointing to the right so we initially rotate a bit to the left.
-float pitch = 0.0f;
-float lastX = 800.0f / 2.0;
-float lastY = 600.0 / 2.0;
-float fov = 45.0f;
-
 // timing
-float deltaTime = 0.0f; // time between current frame and last frame
-float lastFrame = 0.0f;
+float DELTA_TIME = 0.0f; // time between current frame and last frame
+float LAST_FRAME = 0.0f;
+int SCR_WIDTH = 1280; // Window width
+int SCR_HEIGHT = 720; // Window height
 
-/**
- * @brief Callback function to adjust the viewport when the window size changes.
- * @param window A pointer to the GLFWwindow that received the event.
- * @param width The new width, in pixels, of the window.
- * @param height The new height, in pixels, of the window.
- */
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     (void)window; // Avoid unused parameter warning
     glViewport(0, 0, width, height);
 }
 
-/**
- * @brief Processes user input, specifically checking for the ESCAPE key to close the window.
- * @param window A pointer to the GLFWwindow to check for input.
- */
-void processInput(GLFWwindow* window,
-                  glm::vec3& cameraPos,
-                  glm::vec3& cameraFront,
-                  glm::vec3& cameraUp,
-                  float deltaTime) {
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
-        glfwSetWindowShouldClose(window, 1);
-    }
-    const float cameraSpeed = 2.5f * deltaTime; // adjust accordingly
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        cameraPos += cameraSpeed * cameraFront;
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        cameraPos -= cameraSpeed * cameraFront;
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
-}
-
-/**
- * @brief Initializes GLFW, configures window hints, and creates a GLFW window.
- * @param width The desired width of the window.
- * @param height The desired height of the window.
- * @param title The title of the window.
- * @return A pointer to the created GLFWwindow, or nullptr if window creation fails.
- */
 GLFWwindow* initWindow(int width, int height, const char* title) {
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -159,10 +116,6 @@ GLFWwindow* initWindow(int width, int height, const char* title) {
     return window;
 }
 
-/**
- * @brief Initializes GLAD to load OpenGL function pointers.
- * @return True if GLAD initialization is successful, false otherwise.
- */
 bool initGlad() {
     if (gladLoadGLLoader((GLADloadproc)glfwGetProcAddress) == 0) {
         std::cout << "Failed to initialize GLAD" << "\n";
@@ -171,21 +124,11 @@ bool initGlad() {
     return true;
 }
 
-/**
- * @brief Sets up our VAO
- * @param VAO The ID of the Vertex Array Object to set up.
- */
 void setupVAO(unsigned int& VAO) {
     glGenVertexArrays(1, &VAO); // Generate a VAO
     glBindVertexArray(VAO);
 }
 
-/**
- * @brief Sets up our VBO, can be used for rendering a triangle without EBO or with EBO
- * @param VBO The ID of the Vertex Buffer Object to set up.
- * @param vertices Pointer to the vertex data array.
- * @param size The size of the vertex data array in bytes.
- */
 void setupVBO(unsigned int& VBO, float* vertices, size_t size) {
     // Generate a VBO
     glGenBuffers(1, &VBO);
@@ -206,7 +149,6 @@ void setupVBO(unsigned int& VBO, float* vertices, size_t size) {
     glEnableVertexAttribArray(1);
 
     // texture coordinate attribute
-
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
     glEnableVertexAttribArray(2);
 
@@ -214,31 +156,6 @@ void setupVBO(unsigned int& VBO, float* vertices, size_t size) {
     // The VAO unbinding should be done after EBO setup
 }
 
-/**
- * @brief Sets up a rectangle using an Element Buffer Object (EBO).
- * @param VAO The ID of the Vertex Array Object to set up.
- * @param VBO The ID of the Vertex Buffer Object to set up.
- * @param EBO The ID of the Element Buffer Object to set up.
- */
-void setupRectangleWithEBO(unsigned int& VBO, unsigned int& EBO) {
-    // Setup VBO ( we need vertices for that )
-    setupVBO(VBO, RECTANGLE_VERTICES, sizeof(RECTANGLE_VERTICES));
-
-    // Create EBO (must be done while VAO is still bound)
-    glGenBuffers(1, &EBO);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(
-        GL_ELEMENT_ARRAY_BUFFER, sizeof(RECTANGLE_INDICES), RECTANGLE_INDICES, GL_STATIC_DRAW);
-
-    // Now unbind the VAO after both VBO and EBO are set up
-    glBindVertexArray(0);
-}
-
-/**
- * @brief Sets up a triangle without using an Element Buffer Object (EBO).
- * @param VAO The ID of the Vertex Array Object to set up.
- * @param VBO The ID of the Vertex Buffer Object to set up.
- */
 void setupTriangleWithoutEBO(unsigned int& VBO) {
     setupVBO(VBO, TRIANGLE_VERTICES, sizeof(TRIANGLE_VERTICES));
 
@@ -246,23 +163,11 @@ void setupTriangleWithoutEBO(unsigned int& VBO) {
     glBindVertexArray(0);
 }
 
-/**
- * @brief Renders the background color using glClearColor and glClear.
- * @param red Red component of the background color (0.0 to 1.0).
- * @param green Green component of the background color (0.0 to 1.0).
- * @param blue Blue component of the background color (0.0 to 1.0).
- * @param alpha Alpha component of the background color (0.0 to 1.0).
- */
 void renderBackgroundColor(float red, float green, float blue, float alpha) {
     glClearColor(red, green, blue, alpha);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Clear the color and depth buffers
 }
 
-/**
- * @brief Loads a texture from a file and generates mipmaps.
- * @param path The file path to the texture image.
- * @return The OpenGL texture ID, or 0 if loading fails.
- */
 unsigned int loadTexture(const char* path) {
     unsigned int textureID;
     glGenTextures(1, &textureID);
@@ -292,81 +197,26 @@ unsigned int loadTexture(const char* path) {
     return textureID;
 }
 
-/**
- * @brief Generates a transformation matrix combining translation, rotation, and scaling.
- * @param angle The rotation angle in radians.
- * @param translation A glm::vec3 representing the translation vector.
- * @param scale A glm::vec3 representing the scaling factors along each axis.
- * @return A glm::mat4 representing the combined transformation matrix.
- */
-glm::mat4 getTransformMatrix(float angle, glm::vec3 translation, glm::vec3 scale) {
-    glm::mat4 transform = glm::mat4(1.0f);              // Initialize to identity matrix
-    transform = glm::translate(transform, translation); // Apply translation
-    transform = glm::rotate(transform, angle, glm::vec3(0.0f, 0.0f, 1.0f)); // Apply rotation
-    transform = glm::scale(transform, scale);                               // Apply scaling
-    return transform;
-}
-
-void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
-    float xpos = static_cast<float>(xposIn);
-    float ypos = static_cast<float>(yposIn);
-
-    if (firstMouse) {
-        lastX = xpos;
-        lastY = ypos;
-        firstMouse = false;
-    }
-
-    float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
-    lastX = xpos;
-    lastY = ypos;
-
-    float sensitivity = 0.1f; // change this value to your liking
-    xoffset *= sensitivity;
-    yoffset *= sensitivity;
-
-    yaw += xoffset;
-    pitch += yoffset;
-
-    // make sure that when pitch is out of bounds, screen doesn't get flipped
-    if (pitch > 89.0f)
-        pitch = 89.0f;
-    if (pitch < -89.0f)
-        pitch = -89.0f;
-
-    glm::vec3 front;
-    front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-    front.y = sin(glm::radians(pitch));
-    front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-    cameraFront = glm::normalize(front);
-}
-
-void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
-    fov -= (float)yoffset;
-    if (fov < 1.0f)
-        fov = 1.0f;
-    if (fov > 45.0f)
-        fov = 45.0f;
-}
-
-/**
- * @brief Main function of the OpenGL application.
- * Initializes GLFW, GLAD, sets up the window, compiles and links shaders, prepares vertex data,
- * enters the main rendering loop, and cleans up resources upon exit.
- * @return 0 if the program executes successfully, -1 otherwise.
- */
 int main() {
-    GLFWwindow* window = initWindow(1280, 720, "LearnOpenGL");
-    if (window == nullptr) {
+    GLFWwindow* window = initWindow(SCR_WIDTH, SCR_HEIGHT, "LearnOpenGL");
+    if (window == nullptr || !initGlad()) {
         return -1;
     }
 
-    if (!initGlad()) {
-        return -1;
-    }
+    // Setting up our main components
+    Shader ourShader("shaders/shader.vert.glsl", "shaders/shader.frag.glsl");
+    InputManager inputManager;
+    CameraSettings cameraSettings = {
+        glm::vec3(0.0f, 0.0f, 3.0f), // Position
+        glm::vec3(0.0f, 1.0f, 0.0f), // World Up
+        -90.0f,                      // Yaw
+        0.0f,                        // Pitch
+        45.0f                        // Fov
+    };
+    Camera camera(cameraSettings);
+    CameraController cameraController(camera);
 
-    // Get actual framebuffer size (important for high-DPI)
+    // Initialize OpenGL options
     int fbWidth;
     int fbHeight;
     glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
@@ -375,14 +225,30 @@ int main() {
     glEnable(GL_DEPTH_TEST);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // Hide cursor
 
-    Shader ourShader("shaders/shader.vert.glsl", "shaders/shader.frag.glsl");
+    // Callbacks for input handling
+    glfwSetWindowUserPointer(window, &inputManager);
+    glfwSetKeyCallback(window, [](GLFWwindow* win, int key, int scancode, int action, int mods) {
+        auto* input = static_cast<InputManager*>(glfwGetWindowUserPointer(win));
+        if (!input)
+            return;
+
+        if (action == GLFW_PRESS) {
+            input->KeyPress(key);
+        } else if (action == GLFW_RELEASE) {
+            input->KeyRelease(key);
+        }
+    });
+    glfwSetCursorPosCallback(window, [](GLFWwindow* win, double xpos, double ypos) {
+        auto* input = static_cast<InputManager*>(glfwGetWindowUserPointer(win));
+        if (!input)
+            return;
+
+        input->MouseMove(static_cast<float>(xpos), static_cast<float>(ypos));
+    });
 
     // Create separate VAOs for different objects
     unsigned int triangleVAO;
-    unsigned int rectangleVAO;
     unsigned int triangleVBO;
-    unsigned int rectangleVBO;
-    unsigned int rectangleEBO;
 
     // Textures
     unsigned int texture1 = loadTexture("textures/container.png");
@@ -400,10 +266,6 @@ int main() {
     setupVAO(triangleVAO);
     setupTriangleWithoutEBO(triangleVBO);
 
-    // Setup rectangle (with EBO)
-    setupVAO(rectangleVAO);
-    setupRectangleWithEBO(rectangleVBO, rectangleEBO);
-
     // Use our shader
     ourShader.use(); // don't forget to activate the shader before setting uniforms!
     glUniform1i(glGetUniformLocation(ourShader.getShaderProgramID(), "texture1"),
@@ -418,7 +280,11 @@ int main() {
     view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
 
     glm::mat4 projection;
-    projection = glm::perspective(glm::radians(fov), 1280.0f / 720.0f, 0.1f, 100.0f);
+    projection =
+        glm::perspective(glm::radians(cameraController.m_Camera.Fov),
+                         (float)SCR_WIDTH / (float)SCR_HEIGHT, // Cast to float for proper division
+                         0.1f,
+                         100.0f);
 
     // Set transform matrices
     GLint modelLoc = glGetUniformLocation(ourShader.getShaderProgramID(), "model");
@@ -427,21 +293,36 @@ int main() {
     glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
     glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
-    float deltaTime = 0.0f; // Time between current frame and last frame
-    float lastFrame = 0.0f; // Time of last frame
-
-    glfwSetCursorPosCallback(window, mouse_callback);
-    glfwSetScrollCallback(window, scroll_callback);
 
     // Main loop
+    float DELTATIME = 0.0f;     // Time between current frame and last frame
+    float LAST_FRAME = 0.0f;    // Time of last frame
+    float CURRENT_FRAME = 0.0f; // Current frame time
+
     while (glfwWindowShouldClose(window) == 0) {
         // Per frame time logic
-        float currentFrame = glfwGetTime();
-        deltaTime = currentFrame - lastFrame;
-        lastFrame = currentFrame;
+        CURRENT_FRAME = glfwGetTime();
+        DELTATIME = CURRENT_FRAME - LAST_FRAME;
+        LAST_FRAME = CURRENT_FRAME;
 
         // Input
-        processInput(window, cameraPos, cameraFront, cameraUp, deltaTime);
+        if (inputManager.IsKeyPressed(GLFW_KEY_W)) {
+            std::cout << "Moving forward\n";
+            cameraController.ProcessKeyboard(FORWARD, DELTATIME);
+        }
+        if (inputManager.IsKeyPressed(GLFW_KEY_S)) {
+            cameraController.ProcessKeyboard(BACKWARD, DELTATIME);
+        }
+        if (inputManager.IsKeyPressed(GLFW_KEY_A)) {
+            cameraController.ProcessKeyboard(LEFT, DELTATIME);
+        }
+        if (inputManager.IsKeyPressed(GLFW_KEY_D)) {
+            cameraController.ProcessKeyboard(RIGHT, DELTATIME);
+        }
+        cameraController.ProcessMouseMovement(inputManager.DeltaX, -inputManager.DeltaY);
+        inputManager.Update();
+
+        // Background color
         renderBackgroundColor(0.2f, 0.3f, 0.3f, 1.0f); // Set background color
 
         // Bind texture
@@ -462,21 +343,17 @@ int main() {
         }
 
         // Rotate camera around the origin
-        view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+        view = glm::lookAt(cameraController.m_Camera.Position,
+                           cameraController.m_Camera.Position + cameraController.m_Camera.Front,
+                           cameraController.m_Camera.Up);
         glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
 
-        projection = glm::perspective(glm::radians(fov), 1280.0f / 720.0f, 0.1f, 100.0f);
+        projection = glm::perspective(glm::radians(cameraController.m_Camera.Fov),
+                                      (float)SCR_WIDTH /
+                                          (float)SCR_HEIGHT, // Cast to float for proper division
+                                      0.1f,
+                                      100.0f);
         glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
-
-        // Render rectangle (uncomment to see both)
-        // glBindVertexArray(rectangleVAO);
-        // glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-
-        // Rotate over time
-        // glm::mat4 trans = getTransformMatrix((float)glfwGetTime(), glm::vec3(0.0f, 0.0f, 0.0f),
-        // glm::vec3(0.5f, 0.5f, 0.5f));
-        // GLint transformLoc = glGetUniformLocation(ourShader.getShaderProgramID(), "transform");
-        // glUniformMatrix4fv(transformLoc, 1, GL_FALSE, glm::value_ptr(trans));
 
         // Swap buffers and poll events
         glfwSwapBuffers(window);
@@ -485,10 +362,7 @@ int main() {
 
     // Cleanup all resources
     glDeleteVertexArrays(1, &triangleVAO);
-    glDeleteVertexArrays(1, &rectangleVAO);
     glDeleteBuffers(1, &triangleVBO);
-    glDeleteBuffers(1, &rectangleVBO);
-    glDeleteBuffers(1, &rectangleEBO);
     glfwTerminate();
     return 0;
 }
