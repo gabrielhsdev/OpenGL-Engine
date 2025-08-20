@@ -17,7 +17,7 @@ struct Transform {
 };
 
 struct Camera {
-    glm::vec3 position{0.0f, 0.0f, 3.0f};
+    glm::vec3 position{0.0f, 0.0f, 20.0f};
     glm::vec3 front{0.0f, 0.0f, -1.0f};
     glm::vec3 up{0.0f, 1.0f, 0.0f};
     glm::vec3 right{1.0f, 0.0f, 0.0f};
@@ -48,6 +48,15 @@ struct MeshRenderer {
     unsigned int texture2{0};
 };
 
+struct Scene {
+    std::string name;
+
+    // Functions you provide when defining a scene
+    std::function<void(entt::registry&)> onLoad;
+    std::function<void(entt::registry&)> onUnload;
+    std::function<void(entt::registry&, float)> onUpdate;
+};
+
 // TODO: This is for more complex models with multiple meshes, add assimp. Dont remove this for now
 struct ModelMesh {
     unsigned int VAO{0};
@@ -65,13 +74,6 @@ struct ModelRenderer {
 
 // --- Helper Enums ---
 enum class CameraMovement : std::uint8_t { FORWARD, BACKWARD, LEFT, RIGHT };
-
-// --- Base System Class ---
-class BaseSystem {
-  public:
-    virtual ~BaseSystem() = default;
-    virtual void update(entt::registry& registry, float deltaTime) = 0;
-};
 
 // --- Camera System ---
 class CameraSystem {
@@ -232,4 +234,32 @@ class RenderingSystem {
         auto viewMesh = registry.view<Transform, MeshRenderer>();
         viewMesh.each([&](auto& tf, auto& mesh) { renderEntity(tf, mesh, shader); });
     }
+};
+
+// --- Scene System ---
+class SceneManager {
+  public:
+    void addScene(const Scene& scene) {
+        scenes[scene.name] = scene;
+    }
+
+    void switchTo(const std::string& name, entt::registry& registry) {
+        if (!current.empty() && scenes[current].onUnload) {
+            scenes[current].onUnload(registry);
+        }
+        current = name;
+        if (scenes[current].onLoad) {
+            scenes[current].onLoad(registry);
+        }
+    }
+
+    void update(entt::registry& registry, float dt) {
+        if (!current.empty() && scenes[current].onUpdate) {
+            scenes[current].onUpdate(registry, dt);
+        }
+    }
+
+  private:
+    std::unordered_map<std::string, Scene> scenes;
+    std::string current;
 };

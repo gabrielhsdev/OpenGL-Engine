@@ -156,11 +156,7 @@ int main() {
     glEnable(GL_DEPTH_TEST);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
-    // --- Load textures ---
-    unsigned int tex1 = loadTexture("textures/container.png");
-    unsigned int tex2 = loadTexture("textures/emogi.png");
-
-    // --- Shader ---
+    // --- Shader (global for now, could later move into ResourceManager) ---
     Shader shader("shaders/shader.vert.glsl", "shaders/shader.frag.glsl");
     shader.use();
     shader.setInt("texture1", 0);
@@ -169,75 +165,104 @@ int main() {
     // --- ECS registry ---
     entt::registry registry;
 
-    // Camera entity
-    auto cameraEntity = registry.create();
-    registry.emplace<Camera>(cameraEntity);
-    registry.emplace<CameraController>(cameraEntity);
-
-    // Input entity
-    auto inputEntity = registry.create();
-    registry.emplace<Input>(inputEntity);
-
-    // --- Create cube mesh once ---
-    MeshRenderer cubeMesh =
-        MeshSystem::createCube(TRIANGLE_VERTICES, sizeof(TRIANGLE_VERTICES), tex1, tex2);
-
-    // --- Create cube entities ---
-    for (auto& pos : CUBE_POSITIONS) {
-        auto e = registry.create();
-        Transform tf;
-        tf.position = pos;
-        registry.emplace<Transform>(e, tf);
-        registry.emplace<MeshRenderer>(e, cubeMesh);
-    }
-
     // --- GLFW callbacks for input ---
     glfwSetWindowUserPointer(window, &registry);
     glfwSetKeyCallback(window, [](GLFWwindow* win, int key, int sc, int action, int mods) {
         auto* reg = static_cast<entt::registry*>(glfwGetWindowUserPointer(win));
-        auto& input = reg->get<Input>(reg->view<Input>().front());
-        input.keys[key] = (action == GLFW_PRESS || action == GLFW_REPEAT);
+        if (auto view = reg->view<Input>(); !view.empty()) {
+            auto& input = reg->get<Input>(view.front());
+            input.keys[key] = (action == GLFW_PRESS || action == GLFW_REPEAT);
+        }
     });
     glfwSetCursorPosCallback(window, [](GLFWwindow* win, double xpos, double ypos) {
         auto* reg = static_cast<entt::registry*>(glfwGetWindowUserPointer(win));
-        auto& input = reg->get<Input>(reg->view<Input>().front());
-        InputSystem::handleMouse(input, xpos, ypos);
+        if (auto view = reg->view<Input>(); !view.empty()) {
+            auto& input = reg->get<Input>(view.front());
+            InputSystem::handleMouse(input, xpos, ypos);
+        }
     });
+
+    // --- Create our scene ---
+    Scene prototypeScene{
+        "Prototype",
+        // onLoad
+        [](entt::registry& reg) {
+            // Camera
+            auto camEnt = reg.create();
+            reg.emplace<Camera>(camEnt);
+            reg.emplace<CameraController>(camEnt);
+
+            // Input
+            auto inputEnt = reg.create();
+            reg.emplace<Input>(inputEnt);
+
+            // Mesh
+            unsigned int tex1 = loadTexture("textures/container.png");
+            unsigned int tex2 = loadTexture("textures/emogi.png");
+            MeshRenderer cubeMesh =
+                MeshSystem::createCube(TRIANGLE_VERTICES, sizeof(TRIANGLE_VERTICES), tex1, tex2);
+
+            // Spawn cubes
+            for (auto& pos : CUBE_POSITIONS) {
+                auto e = reg.create();
+                Transform tf;
+                tf.position = pos;
+                reg.emplace<Transform>(e, tf);
+                reg.emplace<MeshRenderer>(e, cubeMesh);
+            }
+        },
+        // onUnload
+        [](entt::registry& reg) {
+            reg.clear(); // remove all entities
+        },
+        // onUpdate
+        [](entt::registry& reg, float dt) {
+            // Example per-scene logic: move camera from input
+            auto inputView = reg.view<Input>();
+            auto camView = reg.view<Camera, CameraController>();
+
+            auto& input = inputView.get<Input>(inputView.front());
+            auto [cam, ctrl] = camView.get<Camera, CameraController>(camView.front());
+
+            if (input.keys[GLFW_KEY_W])
+                CameraSystem::processKeyboard(cam, ctrl, CameraMovement::FORWARD, dt);
+            if (input.keys[GLFW_KEY_S])
+                CameraSystem::processKeyboard(cam, ctrl, CameraMovement::BACKWARD, dt);
+            if (input.keys[GLFW_KEY_A])
+                CameraSystem::processKeyboard(cam, ctrl, CameraMovement::LEFT, dt);
+            if (input.keys[GLFW_KEY_D])
+                CameraSystem::processKeyboard(cam, ctrl, CameraMovement::RIGHT, dt);
+
+            CameraSystem::processMouse(cam, ctrl, input.deltaX, -input.deltaY);
+            InputSystem::resetDeltas(input);
+        }};
+
+    // --- SceneManager setup ---
+    SceneManager sceneManager;
+    sceneManager.addScene(prototypeScene);
+    sceneManager.switchTo("Prototype", registry);
 
     // --- Main loop ---
     float lastFrame = 0.0f;
-    while (glfwWindowShouldClose(window) == 0) {
+    while (!glfwWindowShouldClose(window)) {
         float currentFrame = static_cast<float>(glfwGetTime());
         float deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
 
-        auto& input = registry.get<Input>(inputEntity);
-        auto& cam = registry.get<Camera>(cameraEntity);
-        auto& ctrl = registry.get<CameraController>(cameraEntity);
+        // update scene (input + camera are handled in onUpdate)
+        sceneManager.update(registry, deltaTime);
 
-        // --- Camera movement ---
-        if (input.keys[GLFW_KEY_W])
-            CameraSystem::processKeyboard(cam, ctrl, CameraMovement::FORWARD, deltaTime);
-        if (input.keys[GLFW_KEY_S])
-            CameraSystem::processKeyboard(cam, ctrl, CameraMovement::BACKWARD, deltaTime);
-        if (input.keys[GLFW_KEY_A])
-            CameraSystem::processKeyboard(cam, ctrl, CameraMovement::LEFT, deltaTime);
-        if (input.keys[GLFW_KEY_D])
-            CameraSystem::processKeyboard(cam, ctrl, CameraMovement::RIGHT, deltaTime);
-
-        CameraSystem::processMouse(cam, ctrl, input.deltaX, -input.deltaY);
-        InputSystem::resetDeltas(input);
-
-        // --- Render ---
-        RenderingSystem::renderScene(registry, shader, cam, SCR_WIDTH, SCR_HEIGHT);
+        // find camera to render
+        auto camView = registry.view<Camera>();
+        if (!camView.empty()) {
+            auto& cam = camView.get<Camera>(camView.front());
+            RenderingSystem::renderScene(registry, shader, cam, SCR_WIDTH, SCR_HEIGHT);
+        }
 
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
-    // Cleanup
-    glDeleteVertexArrays(1, &cubeMesh.VAO);
-    glDeleteBuffers(1, &cubeMesh.VBO);
     glfwTerminate();
     return 0;
 }
