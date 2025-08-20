@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <iostream>
 #include <glad/glad.h>
+#include <GLFW/glfw3.h>
 #include <entt/entt.hpp>
 #include "engine/Shader.h"
 
@@ -25,6 +26,16 @@ struct Camera {
     float yaw{-90.0f};
     float pitch{0.0f};
     float fov{45.0f};
+
+    void realocVectors() {
+        glm::vec3 front;
+        front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+        front.y = sin(glm::radians(pitch));
+        front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+        this->front = glm::normalize(front);
+        this->right = glm::normalize(glm::cross(this->front, this->worldUp));
+        this->up = glm::normalize(glm::cross(this->right, this->front));
+    }
 };
 
 struct CameraController {
@@ -76,6 +87,7 @@ struct ModelRenderer {
 enum class CameraMovement : std::uint8_t { FORWARD, BACKWARD, LEFT, RIGHT };
 
 // --- Camera System ---
+/*
 class CameraSystem {
   public:
     static void updateCameraVectors(Camera& cam) {
@@ -131,27 +143,97 @@ class CameraSystem {
         updateCameraVectors(cam);
     }
 };
+*/
+class CameraSystem { // We will loop the registry instead of having to pass the camera as a prop
+  public:
+    CameraSystem(entt::registry& reg) : registry(reg) {} ///< Constructor takes a registry reference
+
+    void update(float deltaTime) { ///< Update method to process camera input
+        auto view = registry.view<Camera, CameraController>();
+
+        for (auto entity : view) {
+            auto& cam = view.get<Camera>(entity);
+            auto& ctrl = view.get<CameraController>(entity);
+            auto& input = registry.view<Input>().get<Input>(registry.view<Input>().front());
+
+            if (input.keys[GLFW_KEY_W]) {
+                processKeyboard(cam, ctrl, CameraMovement::FORWARD, deltaTime);
+            }
+            if (input.keys[GLFW_KEY_S]) {
+                processKeyboard(cam, ctrl, CameraMovement::BACKWARD, deltaTime);
+            }
+
+            if (input.keys[GLFW_KEY_A]) {
+                processKeyboard(cam, ctrl, CameraMovement::LEFT, deltaTime);
+            }
+
+            if (input.keys[GLFW_KEY_D]) {
+                processKeyboard(cam, ctrl, CameraMovement::RIGHT, deltaTime);
+            }
+
+            processMouse(cam, ctrl, input.deltaX, -input.deltaY);
+            cam.realocVectors(); // Update camera vectors after processing input
+        }
+    }
+
+  private:
+    entt::registry& registry; ///< Reference to the registry for accessing components and loops
+                              ///< through them ( finds cameras )
+
+    static void processKeyboard(Camera& cam,
+                                const CameraController& ctrl,
+                                CameraMovement dir,
+                                float deltaTime) {
+        float velocity = ctrl.movementSpeed * deltaTime;
+        switch (dir) {
+        case CameraMovement::FORWARD:
+            cam.position += cam.front * velocity;
+            break;
+        case CameraMovement::BACKWARD:
+            cam.position -= cam.front * velocity;
+            break;
+        case CameraMovement::LEFT:
+            cam.position -= cam.right * velocity;
+            break;
+        case CameraMovement::RIGHT:
+            cam.position += cam.right * velocity;
+            break;
+        }
+    }
+
+    static void processMouse(Camera& cam,
+                             const CameraController& ctrl,
+                             float xoffset,
+                             float yoffset,
+                             bool constrainPitch = true) {
+        xoffset *= ctrl.mouseSensitivity;
+        yoffset *= ctrl.mouseSensitivity;
+
+        cam.yaw += xoffset;
+        cam.pitch += yoffset;
+
+        if (constrainPitch) {
+            cam.pitch = std::clamp(cam.pitch, -89.0f, 89.0f);
+        }
+    }
+};
 
 // --- Input System ---
 class InputSystem {
   public:
-    static void handleMouse(Input& input, double xpos, double ypos) {
-        if (input.firstMouse) {
-            input.mouseX = xpos;
-            input.mouseY = ypos;
-            input.firstMouse = false;
+    InputSystem(entt::registry& reg) : registry(reg) {}
+
+    void resetDeltas() {
+        auto view = registry.view<Input>();
+        for (auto e : view) {
+            auto& input = view.get<Input>(e);
+            input.deltaX = 0.0f;
+            input.deltaY = 0.0f;
         }
-
-        input.deltaX = xpos - input.mouseX;
-        input.deltaY = ypos - input.mouseY;
-        input.mouseX = xpos;
-        input.mouseY = ypos;
     }
 
-    static void resetDeltas(Input& input) {
-        input.deltaX = 0.0f;
-        input.deltaY = 0.0f;
-    }
+  private:
+    entt::registry& registry;
 };
 
 // --- Mesh System ---
@@ -223,7 +305,7 @@ class RenderingSystem {
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        glm::mat4 view = CameraSystem::getViewMatrix(cam);
+        glm::mat4 view = glm::lookAt(cam.position, cam.position + cam.front, cam.up);
         glm::mat4 projection =
             glm::perspective(glm::radians(cam.fov), float(width) / height, 0.1f, 100.0f);
 

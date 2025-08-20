@@ -176,66 +176,60 @@ int main() {
     });
     glfwSetCursorPosCallback(window, [](GLFWwindow* win, double xpos, double ypos) {
         auto* reg = static_cast<entt::registry*>(glfwGetWindowUserPointer(win));
-        if (auto view = reg->view<Input>(); !view.empty()) {
-            auto& input = reg->get<Input>(view.front());
-            InputSystem::handleMouse(input, xpos, ypos);
-        }
+        if (!reg)
+            return;
+
+        auto view = reg->view<Input>();
+        if (view.empty())
+            return;
+
+        auto& input = view.get<Input>(view.front());
+        input.deltaX += static_cast<float>(xpos - input.mouseX);
+        input.deltaY += static_cast<float>(ypos - input.mouseY);
+        input.mouseX = static_cast<float>(xpos);
+        input.mouseY = static_cast<float>(ypos);
     });
 
     // --- Create our scene ---
-    Scene prototypeScene{
-        "Prototype",
-        // onLoad
-        [](entt::registry& reg) {
-            // Camera
-            auto camEnt = reg.create();
-            reg.emplace<Camera>(camEnt);
-            reg.emplace<CameraController>(camEnt);
+    Scene prototypeScene{"Prototype",
+                         // onLoad
+                         [](entt::registry& reg) {
+                             // Camera
+                             auto camEnt = reg.create();
+                             reg.emplace<Camera>(camEnt);
+                             reg.emplace<CameraController>(camEnt);
 
-            // Input
-            auto inputEnt = reg.create();
-            reg.emplace<Input>(inputEnt);
+                             // Input
+                             auto inputEnt = reg.create();
+                             reg.emplace<Input>(inputEnt);
 
-            // Mesh
-            unsigned int tex1 = loadTexture("textures/container.png");
-            unsigned int tex2 = loadTexture("textures/emogi.png");
-            MeshRenderer cubeMesh =
-                MeshSystem::createCube(TRIANGLE_VERTICES, sizeof(TRIANGLE_VERTICES), tex1, tex2);
+                             // Mesh
+                             unsigned int tex1 = loadTexture("textures/container.png");
+                             unsigned int tex2 = loadTexture("textures/emogi.png");
+                             MeshRenderer cubeMesh = MeshSystem::createCube(
+                                 TRIANGLE_VERTICES, sizeof(TRIANGLE_VERTICES), tex1, tex2);
 
-            // Spawn cubes
-            for (auto& pos : CUBE_POSITIONS) {
-                auto e = reg.create();
-                Transform tf;
-                tf.position = pos;
-                reg.emplace<Transform>(e, tf);
-                reg.emplace<MeshRenderer>(e, cubeMesh);
-            }
-        },
-        // onUnload
-        [](entt::registry& reg) {
-            reg.clear(); // remove all entities
-        },
-        // onUpdate
-        [](entt::registry& reg, float dt) {
-            // Example per-scene logic: move camera from input
-            auto inputView = reg.view<Input>();
-            auto camView = reg.view<Camera, CameraController>();
+                             // Spawn cubes
+                             for (auto& pos : CUBE_POSITIONS) {
+                                 auto e = reg.create();
+                                 Transform tf;
+                                 tf.position = pos;
+                                 reg.emplace<Transform>(e, tf);
+                                 reg.emplace<MeshRenderer>(e, cubeMesh);
+                             }
+                         },
+                         // onUnload
+                         [](entt::registry& reg) {
+                             reg.clear(); // remove all entities
+                         },
+                         // onUpdate
+                         [](entt::registry& reg, float dt) {
+                             static CameraSystem cameraSystem{reg};
+                             static InputSystem inputSystem{reg};
 
-            auto& input = inputView.get<Input>(inputView.front());
-            auto [cam, ctrl] = camView.get<Camera, CameraController>(camView.front());
-
-            if (input.keys[GLFW_KEY_W])
-                CameraSystem::processKeyboard(cam, ctrl, CameraMovement::FORWARD, dt);
-            if (input.keys[GLFW_KEY_S])
-                CameraSystem::processKeyboard(cam, ctrl, CameraMovement::BACKWARD, dt);
-            if (input.keys[GLFW_KEY_A])
-                CameraSystem::processKeyboard(cam, ctrl, CameraMovement::LEFT, dt);
-            if (input.keys[GLFW_KEY_D])
-                CameraSystem::processKeyboard(cam, ctrl, CameraMovement::RIGHT, dt);
-
-            CameraSystem::processMouse(cam, ctrl, input.deltaX, -input.deltaY);
-            InputSystem::resetDeltas(input);
-        }};
+                             cameraSystem.update(dt);
+                             inputSystem.resetDeltas();
+                         }};
 
     // --- SceneManager setup ---
     SceneManager sceneManager;
