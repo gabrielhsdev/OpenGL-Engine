@@ -1,14 +1,16 @@
 #pragma once
 
-#include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <engine/stb_image.h>
 #include <unordered_map>
+#include <glm/glm.hpp>
 #include <iostream>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <entt/entt.hpp>
-#include "engine/Shader.h"
+#include <engine/Shader.h>
+#include <engine/Texture.h>
 
 // --- Components ---
 struct Transform {
@@ -18,7 +20,7 @@ struct Transform {
 };
 
 struct Camera {
-    glm::vec3 position{0.0f, 0.0f, 20.0f};
+    glm::vec3 position{0.0f, 0.0f, 5.0f};
     glm::vec3 front{0.0f, 0.0f, -1.0f};
     glm::vec3 up{0.0f, 1.0f, 0.0f};
     glm::vec3 right{1.0f, 0.0f, 0.0f};
@@ -50,13 +52,16 @@ struct Input {
     bool firstMouse{true};
 };
 
+struct DeltaTime {
+    float deltaTime{0.0f}; // Time between current frame and last frame
+};
+
 // This is for simple mesh rendering
 struct MeshRenderer {
     unsigned int VAO{0};
     unsigned int VBO{0};
     unsigned int vertexCount{0};
     unsigned int texture1{0};
-    unsigned int texture2{0};
 };
 
 struct Scene {
@@ -75,7 +80,6 @@ struct ModelMesh {
     unsigned int EBO{0};
     unsigned int indexCount{0};
     unsigned int texture1{0};
-    unsigned int texture2{0};
 };
 
 // TODO: This is for more complex models with multiple meshes, add assimp. Dont remove this for now
@@ -87,63 +91,6 @@ struct ModelRenderer {
 enum class CameraMovement : std::uint8_t { FORWARD, BACKWARD, LEFT, RIGHT };
 
 // --- Camera System ---
-/*
-class CameraSystem {
-  public:
-    static void updateCameraVectors(Camera& cam) {
-        glm::vec3 front;
-        front.x = cos(glm::radians(cam.yaw)) * cos(glm::radians(cam.pitch));
-        front.y = sin(glm::radians(cam.pitch));
-        front.z = sin(glm::radians(cam.yaw)) * cos(glm::radians(cam.pitch));
-        cam.front = glm::normalize(front);
-        cam.right = glm::normalize(glm::cross(cam.front, cam.worldUp));
-        cam.up = glm::normalize(glm::cross(cam.right, cam.front));
-    }
-
-    static glm::mat4 getViewMatrix(const Camera& cam) {
-        return glm::lookAt(cam.position, cam.position + cam.front, cam.up);
-    }
-
-    static void processKeyboard(Camera& cam,
-                                const CameraController& ctrl,
-                                CameraMovement dir,
-                                float deltaTime) {
-        float velocity = ctrl.movementSpeed * deltaTime;
-        switch (dir) {
-        case CameraMovement::FORWARD:
-            cam.position += cam.front * velocity;
-            break;
-        case CameraMovement::BACKWARD:
-            cam.position -= cam.front * velocity;
-            break;
-        case CameraMovement::LEFT:
-            cam.position -= cam.right * velocity;
-            break;
-        case CameraMovement::RIGHT:
-            cam.position += cam.right * velocity;
-            break;
-        }
-        updateCameraVectors(cam);
-    }
-
-    static void processMouse(Camera& cam,
-                             const CameraController& ctrl,
-                             float xoffset,
-                             float yoffset,
-                             bool constrainPitch = true) {
-        xoffset *= ctrl.mouseSensitivity;
-        yoffset *= ctrl.mouseSensitivity;
-
-        cam.yaw += xoffset;
-        cam.pitch += yoffset;
-
-        if (constrainPitch)
-            cam.pitch = std::clamp(cam.pitch, -89.0f, 89.0f);
-
-        updateCameraVectors(cam);
-    }
-};
-*/
 class CameraSystem { // We will loop the registry instead of having to pass the camera as a prop
   public:
     CameraSystem(entt::registry& reg) : registry(reg) {} ///< Constructor takes a registry reference
@@ -239,10 +186,7 @@ class InputSystem {
 // --- Mesh System ---
 class MeshSystem {
   public:
-    static MeshRenderer createCube(float* vertices,
-                                   size_t vertSize,
-                                   unsigned int texture1 = 0,
-                                   unsigned int texture2 = 0) {
+    static MeshRenderer createCube(float* vertices, size_t vertSize, unsigned int texture1 = 0) {
         MeshRenderer mesh;
         glGenVertexArrays(1, &mesh.VAO);
         glGenBuffers(1, &mesh.VBO);
@@ -264,7 +208,6 @@ class MeshSystem {
 
         mesh.vertexCount = static_cast<unsigned int>(vertSize / (8 * sizeof(float)));
         mesh.texture1 = texture1;
-        mesh.texture2 = texture2;
         return mesh;
     }
 };
@@ -272,36 +215,9 @@ class MeshSystem {
 // --- Rendering System ---
 class RenderingSystem {
   public:
-    static void renderEntity(const Transform& tf, const MeshRenderer& mesh, Shader& shader) {
-        if (mesh.texture1 != 0u) {
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, mesh.texture1);
-        }
-        if (mesh.texture2 != 0u) {
-            glActiveTexture(GL_TEXTURE1);
-            glBindTexture(GL_TEXTURE_2D, mesh.texture2);
-        }
+    RenderingSystem(entt::registry& reg) : registry(reg) {}
 
-        glBindVertexArray(mesh.VAO);
-
-        glm::mat4 model = glm::mat4(1.0f);
-        model = glm::translate(model, tf.position);
-        model = glm::rotate(model, glm::radians(tf.rotation.x), glm::vec3(1, 0, 0));
-        model = glm::rotate(model, glm::radians(tf.rotation.y), glm::vec3(0, 1, 0));
-        model = glm::rotate(model, glm::radians(tf.rotation.z), glm::vec3(0, 0, 1));
-        model = glm::scale(model, tf.scale);
-
-        shader.setMat4("model", model);
-        glDrawArrays(GL_TRIANGLES, 0, mesh.vertexCount);
-
-        glBindVertexArray(0);
-    }
-
-    static void renderScene(entt::registry& registry,
-                            Shader& shader,
-                            const Camera& cam,
-                            int width,
-                            int height) {
+    void update(Shader& shader, const Camera& cam, int width, int height) {
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -316,9 +232,33 @@ class RenderingSystem {
         auto viewMesh = registry.view<Transform, MeshRenderer>();
         viewMesh.each([&](auto& tf, auto& mesh) { renderEntity(tf, mesh, shader); });
     }
+
+  private:
+    entt::registry& registry;
+
+    static void renderEntity(const Transform& transform, const MeshRenderer& mesh, Shader& shader) {
+        if (mesh.texture1 != 0u) {
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, mesh.texture1);
+        }
+
+        glBindVertexArray(mesh.VAO);
+
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, transform.position);
+        model = glm::rotate(model, glm::radians(transform.rotation.x), glm::vec3(1, 0, 0));
+        model = glm::rotate(model, glm::radians(transform.rotation.y), glm::vec3(0, 1, 0));
+        model = glm::rotate(model, glm::radians(transform.rotation.z), glm::vec3(0, 0, 1));
+        model = glm::scale(model, transform.scale);
+
+        shader.setMat4("model", model);
+        glDrawArrays(GL_TRIANGLES, 0, mesh.vertexCount);
+
+        glBindVertexArray(0);
+    }
 };
 
-// --- Scene System ---
+// --- Scene Manager ---
 class SceneManager {
   public:
     void addScene(const Scene& scene) {
@@ -338,10 +278,45 @@ class SceneManager {
     void update(entt::registry& registry, float dt) {
         if (!current.empty() && scenes[current].onUpdate) {
             scenes[current].onUpdate(registry, dt);
+        } else {
+            std::cout << "No active scene to update.\n";
         }
     }
 
   private:
     std::unordered_map<std::string, Scene> scenes;
     std::string current;
+};
+
+// --- Resource Manager ---
+template <typename Resource> class ResourceManager {
+  public:
+    using Loader = std::function<std::unique_ptr<Resource>(const std::string&)>;
+    using Deleter = std::function<void(Resource&)>;
+
+    template <typename LoaderFn>
+    static Resource& load(const std::string& name, const std::string& path, LoaderFn loader) {
+        resources[name] = loader(path);
+        return *resources[name];
+    }
+
+    static Resource& get(const std::string& name) {
+        return *resources.at(name);
+    }
+
+    static void clear(const std::string& name) {
+        resources.erase(name);
+    }
+
+    static void clearAll(Deleter deleter = nullptr) {
+        if (deleter) {
+            for (auto& [_, res] : resources) {
+                deleter(*res);
+            }
+        }
+        resources.clear();
+    }
+
+  private:
+    static inline std::unordered_map<std::string, std::unique_ptr<Resource>> resources;
 };

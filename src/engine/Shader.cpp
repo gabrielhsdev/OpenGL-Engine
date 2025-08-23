@@ -15,7 +15,7 @@ std::stringstream Shader::readShaderFile(const char* shaderPath) {
     }
 }
 
-Shader::ShaderType Shader::compileShader(const char* shaderCode, GLenum shaderType) {
+ShaderType Shader::compileShader(const char* shaderCode, GLenum shaderType) {
     unsigned int shader = glCreateShader(shaderType);
     glShaderSource(shader, 1, &shaderCode, NULL);
     glCompileShader(shader);
@@ -130,6 +130,6 @@ void Shader::setMat4(const std::string& name, const glm::mat4& mat) const {
                        glm::value_ptr(mat));
 }
 
-unsigned int Shader::getShaderProgramID() {
+unsigned int Shader::getShaderProgramID() const {
     return this->SHADERPROGRAMID;
 }

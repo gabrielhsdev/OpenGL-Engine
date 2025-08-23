@@ -11,6 +11,15 @@
 #include <glm/gtc/type_ptr.hpp>
 
 /**
+ * @struct ShaderType
+ * @brief Represents a compiled shader object.
+ */
+struct ShaderType {
+    unsigned int id; ///< OpenGL shader object ID
+    GLenum type;     ///< Type of shader (e.g., GL_VERTEX_SHADER, GL_FRAGMENT_SHADER)
+};
+
+/**
  * @class Shader
  * @brief Utility class for compiling and managing OpenGL shader programs.
  *
@@ -19,15 +28,6 @@
  */
 class Shader {
   public:
-    /**
-     * @struct ShaderType
-     * @brief Represents a compiled shader object.
-     */
-    struct ShaderType {
-        unsigned int id; ///< OpenGL shader object ID
-        GLenum type;     ///< Type of shader (e.g., GL_VERTEX_SHADER, GL_FRAGMENT_SHADER)
-    };
-
     /**
      * @brief Construct a Shader program from vertex and fragment shader source files.
      * @param vertexPath Path to the vertex shader source file.
@@ -77,7 +77,7 @@ class Shader {
      * @brief Get the OpenGL shader program ID.
      * @param shaderProgramID Reference to store the shader program ID.
      */
-    unsigned int getShaderProgramID();
+    unsigned int getShaderProgramID() const;
 
   private:
     unsigned int SHADERPROGRAMID; ///< OpenGL shader program ID
@@ -107,5 +107,13 @@ class Shader {
      */
     static unsigned int createShaderProgram(const ShaderType& vertex, const ShaderType& fragment);
 };
+
+// Loader ( Needed for all the resources )
+static std::unique_ptr<Shader> shaderLoader(const std::string& pathPair) {
+    auto sep = pathPair.find(';');
+    auto vert = pathPair.substr(0, sep);
+    auto frag = pathPair.substr(sep + 1);
+    return std::make_unique<Shader>(vert.c_str(), frag.c_str());
+}
 
 #endif
