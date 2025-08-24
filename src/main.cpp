@@ -4,19 +4,30 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <engine/Shader.h>
-#include <engine/ecs.h> // All ECS logic and Shader
+#include <engine/ecs.h>
 #include <engine/stb_image.h>
-#include <engine/simpleMeshes.h> // Cube vertices and positions
+#include <engine/simpleMeshes.h>
+#include <engine/DeltaTime.h>
 
-// TODO: Create a delta time system ??? ( may be called something else )
+// TODO: Improve our onUpdate ? Maybe we can have for example, the shader and camera inside the
+// SceneManager loop Since we will always have to loop though them, right ? Easy/Medium
 
 // TODO: Create some kind of model-loader using assimp so we dont need to use the basic shape
 // factory anymore, after doing that we can finally look into removing the basic shapes and its
-// factory. We may have default cube / simple shapes FBX files then
+// factory. We may have default cube / simple shapes FBX files then / Hard !
 
-// TODO: Improve ResourceManager before refactoring
+// TODO: Refactor the entire code so we can split into more files and start a better engine kick /
+// Easy !
 
-// TODO: Refactor the entire code so we can split into more files
+// TODO: Implement transform animation system
+
+// TODO: Implement fbx animation system
+
+// TODO: Implement lights / shadows
+
+// TODO: Implement glass
+
+// TODO: Implement sound ?
 
 // timing
 float DELTA_TIME = 0.0f; // time between current frame and last frame
@@ -86,6 +97,9 @@ int main() {
     // --- ECS registry ---
     entt::registry registry;
 
+    // Register DeltaTime as a singleton component by providing an instance
+    registry.ctx().emplace<DeltaTime>();
+
     // --- GLFW callbacks for input ---
     glfwSetWindowUserPointer(window, &registry);
     glfwSetKeyCallback(window, [](GLFWwindow* win, int key, int sc, int action, int mods) {
@@ -154,18 +168,22 @@ int main() {
             ResourceManager<Texture>::clearAll(); // textures deleted in ~Texture
         },
         // onUpdate
-        [](entt::registry& reg, float deltaTime) {
+        [](entt::registry& reg) {
+            // Register our systems
             static RenderingSystem renderingSystem{reg};
             static CameraSystem cameraSystem{reg};
             static InputSystem inputSystem{reg};
-            auto& sameShader = ResourceManager<Shader>::get("basic");
+
+            // Get Needed Instances
+            auto& ShaderInstance = ResourceManager<Shader>::get("basic");
+            auto& dtManager = reg.ctx().get<DeltaTime>();
             auto camView = reg.view<Camera>();
 
-            cameraSystem.update(deltaTime);
+            cameraSystem.update(dtManager.getTime().deltaTime);
             inputSystem.resetDeltas();
             if (!camView.empty()) {
                 auto& cam = camView.get<Camera>(camView.front());
-                renderingSystem.update(sameShader, cam, SCR_WIDTH, SCR_HEIGHT);
+                renderingSystem.update(ShaderInstance, cam, SCR_WIDTH, SCR_HEIGHT);
             }
         }};
 
@@ -175,14 +193,12 @@ int main() {
     sceneManager.switchTo("Prototype", registry);
 
     // --- Main loop ---
-    float lastFrame = 0.0f;
+    auto& dtManager = registry.ctx().get<DeltaTime>();
     while (glfwWindowShouldClose(window) == 0) {
-        float currentFrame = static_cast<float>(glfwGetTime());
-        float deltaTime = currentFrame - lastFrame;
-        lastFrame = currentFrame;
+        dtManager.calculateDeltaTime();
 
         // update scene (input + camera + rendering are handled in onUpdate)
-        sceneManager.update(registry, deltaTime);
+        sceneManager.update(registry);
 
         glfwSwapBuffers(window);
         glfwPollEvents();

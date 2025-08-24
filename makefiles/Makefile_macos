@@ -9,11 +9,11 @@ BUILD_DIR = build
 TARGET = main.exe
 
 # Include paths
-INCLUDES = -I$(INCLUDE_DIR) -I/opt/homebrew/opt/glfw/include
+INCLUDES = -I$(INCLUDE_DIR) -I/opt/homebrew/opt/glfw/include -I/opt/homebrew/opt/assimp/include
 
 # Library paths and libraries
-LDFLAGS = -L/opt/homebrew/opt/glfw/lib
-LIBS = -lglfw -framework OpenGL
+LDFLAGS = -L/opt/homebrew/opt/glfw/lib -L/opt/homebrew/opt/assimp/lib
+LIBS = -lglfw -framework OpenGL -lassimp
 
 # Source files (recursive search)
 SOURCES = $(shell find $(SRC_DIR) -name "*.cpp")

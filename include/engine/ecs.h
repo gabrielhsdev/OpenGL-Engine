@@ -11,6 +11,7 @@
 #include <entt/entt.hpp>
 #include <engine/Shader.h>
 #include <engine/Texture.h>
+#include <engine/DeltaTime.h>
 
 // --- Components ---
 struct Transform {
@@ -52,11 +53,6 @@ struct Input {
     bool firstMouse{true};
 };
 
-struct DeltaTime {
-    float deltaTime{0.0f}; // Time between current frame and last frame
-};
-
-// This is for simple mesh rendering
 struct MeshRenderer {
     unsigned int VAO{0};
     unsigned int VBO{0};
@@ -70,10 +66,9 @@ struct Scene {
     // Functions you provide when defining a scene
     std::function<void(entt::registry&)> onLoad;
     std::function<void(entt::registry&)> onUnload;
-    std::function<void(entt::registry&, float)> onUpdate;
+    std::function<void(entt::registry&)> onUpdate;
 };
 
-// TODO: This is for more complex models with multiple meshes, add assimp. Dont remove this for now
 struct ModelMesh {
     unsigned int VAO{0};
     unsigned int VBO{0};
@@ -82,7 +77,6 @@ struct ModelMesh {
     unsigned int texture1{0};
 };
 
-// TODO: This is for more complex models with multiple meshes, add assimp. Dont remove this for now
 struct ModelRenderer {
     std::vector<ModelMesh> meshes;
 };
@@ -275,9 +269,9 @@ class SceneManager {
         }
     }
 
-    void update(entt::registry& registry, float dt) {
+    void update(entt::registry& registry) {
         if (!current.empty() && scenes[current].onUpdate) {
-            scenes[current].onUpdate(registry, dt);
+            scenes[current].onUpdate(registry);
         } else {
             std::cout << "No active scene to update.\n";
         }
